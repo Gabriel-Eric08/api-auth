@@ -1,3 +1,5 @@
+import os
+
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, jwt_required
 from models import db, Usuario, Sistema, UsuarioSistema
@@ -110,9 +112,6 @@ def verify_token():
 @auth_bp.route('/check-signature', methods=['GET'])
 @jwt_required()
 def check_signature():
-    """
-    Rota para verificar o status da assinatura do usuário.
-    """
     from flask_jwt_extended import get_jwt_identity, get_jwt
     
     claims = get_jwt()
@@ -138,3 +137,35 @@ def check_signature():
         "sistema": assinatura.sistema.nome,
         "dias_restantes": (assinatura.data_exp - datetime.utcnow()).days
     }), 200
+@auth_bp.route('/tenant/<restaurante_login>', methods=['GET'])
+def get_tenant_config(restaurante_login):
+
+    expected_api_key = os.getenv('JWT_SECRET_KEY')
+    client_api_key = request.headers.get('X-System-Api-Key')
+    
+    if not expected_api_key or client_api_key != expected_api_key:
+        return jsonify({"msg": "Acesso não autorizado. Chave de API inválida."}), 401
+
+    usuario = Usuario.query.filter_by(login=restaurante_login).first()
+    
+    if not usuario:
+        return jsonify({"msg": "Restaurante não encontrado"}), 404
+    
+    sistema = Sistema.query.filter_by(nome="Restaurante").first()
+    if sistema:
+        assinatura = UsuarioSistema.query.filter_by(
+            usuario_id=usuario.id,
+            sistema_id=sistema.id
+        ).first()
+        
+        if not assinatura or not assinatura.assinatura_ativa():
+            return jsonify({"msg": "Restaurante com assinatura inativa."}), 403
+
+    db_config = {
+        "host": usuario.db_host,
+        "port": usuario.db_port,
+        "user": usuario.db_user,
+        "database": usuario.db_name
+    }
+    
+    return jsonify({"db_config": db_config}), 200
