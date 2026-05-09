@@ -35,6 +35,10 @@ def index():
 def health():
     return {'status': 'ok', 'database': 'connected' if db.engine else 'disconnected'}
 
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 300,
+}
 
 # Contexto da aplicação para criar tabelas
 with app.app_context():
